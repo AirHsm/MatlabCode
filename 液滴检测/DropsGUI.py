@@ -84,7 +84,8 @@ def analysis():
 		r = circles[0, i, 2]
 		if 1+RR<centx<n-RR and 1+RR<centy<m-RR:
 			Rv = np.sqrt((X-centx)**2 + (Y-centy)**2)
-			drop = fimg[centy-RR:centy+RR,centx-RR:centx+RR]
+			temp = fimg * (Rv <= RR)
+			drop = temp[centy-RR:centy+RR,centx-RR:centx+RR]
 			Drops.append(drop)
 			DropSTD.append(np.std(drop))
 			DropDensity.append(np.sum(fimg*(Rv<=RR))/RR**2)
@@ -105,33 +106,49 @@ def analysis():
 	'''
 
 def CellNumCount():
+	# detect cell number of each drops.
 	print('Starting count...')
 
 	global Drops0
 	global Drops1
 	global Drops2
 
+	global Index0
+	global Index1
+	global Index2
+
 	Drops0 = list()
 	Drops1 = list()
 	Drops2 = list()
 
+	Index0 = list()
+	Index1 = list()
+	Index2 = list()
+
 	THR = int(values['_THR_'])
 
-	for drop in Drops:
+	for i, drop in enumerate(Drops):
 		ret, thresh = cv2.threshold(drop, THR, 255, 0)
 		contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 		contourNum = len(contours)
 		if contourNum == 0:
 			Drops0.append(drop)
+			Index0.append(circles[0,i,:])
 		if contourNum == 1:
 			rect = cv2.minAreaRect(contours[0])
 			WH = rect[1]
 			if np.max(WH)/np.min(WH) > 1.3:
 				Drops2.append(drop)
+				Index2.append(circles[0,i,:])
 			else:
 				Drops1.append(drop)
+				Index1.append(circles[0,i,:])
 		if contourNum > 1:
 			Drops2.append(drop)
+			index2.append(circles[0,i,:])
+
+	print(len(Index0))
+	print(np.shape(Index0[0]))
 
 	window.Element('_DROPNUM0_').update(str(len(Drops0)))
 	window.Element('_DROPNUM1_').update(str(len(Drops1)))
@@ -140,6 +157,7 @@ def CellNumCount():
 
 
 def ExportData():
+	# export results
 	filepath =  values['_EXPORT_']
 	WriteTIFF(os.path.join(filepath,'Drops.tif'), Drops)	# Export images of each drops into one .tif file
 
@@ -147,19 +165,87 @@ def ExportData():
 
 
 def ReadTIFF(filename):
+	# read images from a .tif file
 	tif = TIFF.open(filename, mode='r')
 	Imgs = list()
 	for img in list(tif.iter_images()):
 		Imgs.append(img)
 	return
 
+
 def WriteTIFF(filename, Imgs):
+	# write image into a .tif file
 	tif = TIFF.open(filename, mode='w')
 	ImgsNum = len(Imgs)
 	for img in Imgs:
 		tif.write_image(img, compression=None)
 	tif.close()
 	return
+
+
+
+def MakeMontage(Imgs):
+	# make montage view of drop images
+	m,n = np.shape(Imgs[0])
+	num = int(np.ceil(np.sqrt(len(Imgs))))
+	montage = np.zeros((m*num,n*num))
+	i = 0
+	count = len(Imgs)
+	for x in range(num):
+		for y in range(num):
+			if i >= count:
+				break
+			montage[y*m:(y+1)*m, x*n:(x+1)*n] = Imgs[i]
+			i += 1
+	print('Montage generated.')
+	return montage
+
+
+def ShowDrops(CellNum):
+	# show images of drops for checking
+	#cI = cfimg
+	if CellNum == -1:
+		Imgs = Drops
+		#for i in circles[0,:]:
+		#	cv2.circle(cI, (i[0],i[1]), i[2], (255,0,0),2)
+	else:
+		if CellNum == 0:
+			Imgs = Drops0
+		#	cIndex = Index0
+		if CellNum == 1:
+			Imgs = Drops1
+		#	cIndex = Index1
+		if CellNum > 1:
+			Imgs = Drops2
+		#	cIndex = Index2
+		#for i in cIndex:
+		#	cv2.circle(cI, (i[0], i[1]), i[2], (255,0,0),2)
+	montage = MakeMontage(Imgs)
+	plt.figure()
+	#lt.subplot(121), plt.imshow(cI), plt.xticks([]), plt.yticks([])
+	#plt.subplot(122), plt.imshow(montage, 'gray'), plt.xticks([]), plt.yticks([])
+	plt.imshow(montage, 'gray'), plt.xticks([]), plt.yticks([])
+	plt.show(block=False)
+
+def ShowHist(CellNum):
+	if CellNum == -1:
+		Imgs = Drops
+	if CellNum == 0:
+		Imgs = Drops0
+	if CellNum == 1:
+		Imgs = Drops1
+	if CellNum > 1:
+		Imgs = Drops2
+
+	intensity = list()
+
+	for img in Imgs:
+		intensity.append(np.sum(img))
+
+	plt.figure()
+	plt.hist(intensity)
+	plt.show(block=False)
+
 
 
 # layout
@@ -212,10 +298,10 @@ layout = [
 				sg.Text('多细胞液滴个数:'),
 				sg.Text('***', size=(5,1), key='_DROPNUM2_')],
 			[
-				sg.Button('显示液滴',size=(10,1)),
-				sg.Button('显示无细胞液滴',size=(10,1)),
-				sg.Button('显示单细胞液滴',size=(10,1)),
-				sg.Button('显示多细胞液滴',size=(10,1))],
+				sg.Button('显示液滴',size=(20,1)),
+				sg.Button('显示无细胞液滴',size=(20,1)),
+				sg.Button('显示单细胞液滴',size=(20,1)),
+				sg.Button('显示多细胞液滴',size=(20,1))],
 			[
 				sg.Button('总荧光分布直方图', size=(20,1)),
 				sg.Button('无细胞荧光分布直方图', size=(20,1)),
@@ -293,10 +379,56 @@ while True:
 			window.Element('_OUTPUT_').update('Cannot export data successfully. Please check.')
 
 	if event == '显示液滴':
-		#montage = build_montages(imgs, (m,n), (x,x))
-		pass
+		try:
+			ShowDrops(-1)
+		except Exception as e:
+			window.Element('_OUTPUT_').update('Something went wrong with showing the drops')
+
+	if event == '显示无细胞液滴':
+		try:
+			ShowDrops(0)
+		except Exception as e:
+			window.Element('_OUTPUT_').update('Something went wrong with showing the drops')
+
+	if event == '显示单细胞液滴':
+		try:
+			ShowDrops(1)
+		except Exception as e:
+			window.Element('_OUTPUT_').update('Something went wrong with showing the drops')
+
+	if event == '显示多细胞液滴':
+		try:
+			ShowDrops(2)
+		except Exception as e:
+			window.Element('_OUTPUT_').update('Something went wrong with showing the drops')
+
+	if event == '总荧光分布直方图':
+		try:
+			ShowHist(-1)
+		except Exception as e:
+			window.Element('_OUTPUT_').update('Something went wrong with showing the histgram')
+
+	if event == '无细胞荧光分布直方图':
+		try:
+			ShowHist(0)
+		except Exception as e:
+			window.Element('_OUTPUT_').update('Something went wrong with showing the histgram')
+
+	if event == '单细胞荧光分布直方图':
+		try:
+			ShowHist(1)
+		except Exception as e:
+			window.Element('_OUTPUT_').update('Something went wrong with showing the histgram')
+
+	if event == '多细胞荧光分布直方图':
+		try:
+			ShowHist(2)
+		except Exception as e:
+			window.Element('_OUTPUT_').update('Something went wrong with showing the histgram')
 
 
+	if event == 'Export':
+		window.Element('_OUTPUT_').update('Aha! Some work still needs to be done.')
 
 window.Close()
 
